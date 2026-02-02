@@ -1,2 +1,37 @@
-node_modules
-node_modules
+# Node.js
+node_modules/
+dist/
+dist-ssr/
+*.local
+.env
+.env.*
+!.env.example
+
+# Python
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Project Specific
+python-backend/ffmpeg
+python-backend/uploads/
+*.m4a
+*.webm
+*.mp3
+*.wav
+audio_errors.log
+ffmpeg_version.txt
+test_generator_local.py
+test_api.py
+
+# OS
+.DS_Store
+Thumbs.db
