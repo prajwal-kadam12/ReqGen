@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Transcription Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .container {
+            border: 2px solid #4CAF50;
+            padding: 30px;
+            border-radius: 10px;
+        }
+        h1 {
+            color: #4CAF50;
+        }
+        input[type="file"] {
+            margin: 20px 0;
+            padding: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Audio Transcription Test</h1>
+        <p><strong>Backend URL:</strong> <span id="backendUrl">http://localhost:5001</span></p>
+        
+        <input type="file" id="audioFile" accept=".mp3,.wav,.m4a,.ogg,.flac,.aac">
+        <br>
+        <button onclick="testTranscription()">Upload & Transcribe</button>
+        
+        <div id="status"></div>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'http://localhost:5001';
+        
+        async function testTranscription() {
+            const fileInput = document.getElementById('audioFile');
+            const statusDiv = document.getElementById('status');
+            const resultDiv = document.getElementById('result');
+            
+            if (!fileInput.files || !fileInput.files[0]) {
+                statusDiv.className = 'error';
+                statusDiv.textContent = '❌ Please select an audio file first!';
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            
+            // Show uploading status
+            statusDiv.className = 'info';
+            statusDiv.textContent = `📤 Uploading ${file.name}...`;
+            resultDiv.textContent = '';
+            
+            try {
+                // Create FormData
+                const formData = new FormData();
+                formData.append('audio', file);
+                
+                console.log('Sending request to:', `${BACKEND_URL}/api/process-audio`);
+                
+                // Send request
+                const response = await fetch(`${BACKEND_URL}/api/process-audio`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to process audio');
+                }
+                
+                const data = await response.json();
+                
+                // Show success
+                statusDiv.className = 'success';
+                statusDiv.textContent = '✅ Transcription successful!';
+                
+                // Display results
+                resultDiv.innerHTML = `
+                    <h3>📝 Transcript:</h3>
+                    <p>${data.transcript}</p>
+                    <hr>
+                    <h3>📊 Summary:</h3>
+                    <p>${data.summary}</p>
+                `;
+                
+            } catch (error) {
+                console.error('Error:', error);
+                statusDiv.className = 'error';
+                statusDiv.textContent = `❌ Error: ${error.message}`;
+                
+                resultDiv.innerHTML = `
+                    <h3>Debug Info:</h3>
+                    <p><strong>Backend URL:</strong> ${BACKEND_URL}/api/process-audio</p>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p><strong>Tip:</strong> Check if Python backend is running on port 5001</p>
+                `;
+            }
+        }
+        
+        // Test backend health on page load
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/health`);
+                const data = await response.json();
+                console.log('Backend health check:', data);
+                document.getElementById('backendUrl').textContent += ' ✅ (Connected)';
+                document.getElementById('backendUrl').style.color = 'green';
+            } catch (error) {
+                console.error('Backend health check failed:', error);
+                document.getElementById('backendUrl').textContent += ' ❌ (Not connected)';
+                document.getElementById('backendUrl').style.color = 'red';
+            }
+        });
+    </script>
+</body>
+</html>

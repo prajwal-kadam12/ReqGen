@@ -1,0 +1,36 @@
+I already have an existing Note Editor page where users can type and edit notes.
+
+✅ Task:
+Add a new feature that allows users to record their voice (in any language), automatically convert it to English text, and insert that text directly into the Note Editor textarea.
+
+💡 Feature Details:
+1. Add a small microphone 🎤 button next to the Note Editor text area (e.g., “Record Note”).
+2. When the user clicks the button:
+   - Start recording audio using the browser’s MediaRecorder API.
+   - Show a small red “Recording…” indicator.
+3. When the user clicks again (to stop recording):
+   - Stop the recording.
+   - Send the audio blob to a backend endpoint `/api/transcribe`.
+4. In the backend (Node.js + Express):
+   - Accept the uploaded audio using `multer`.
+   - Use the **OpenAI Whisper API** (`model: whisper-1`) to convert the audio to text (auto-detect language).
+   - Use the **LibreTranslate API** (`https://libretranslate.com/translate`) to translate the transcribed text into English.
+   - Return the English text to the frontend.
+5. Automatically insert the English-translated text into the Note Editor textarea (append or replace current note text).
+6. Add a loading spinner or message while transcription/translation is in progress.
+7. Handle errors gracefully (e.g., “Recording failed” or “Translation service unavailable”).
+
+🛠️ Technical Setup:
+- Frontend: JavaScript (React or plain JS) using `fetch()` to call the backend API.
+- Backend: Node.js + Express + Multer + node-fetch.
+- Use environment variable `OPENAI_API_KEY` for Whisper API key.
+- LibreTranslate API is free and public; no key required.
+
+⚙️ Integration Instructions:
+- Update the existing Note Editor page only (do NOT create a new page).
+- Add the microphone button UI and logic inside the Note Editor component or HTML section.
+- Add one new backend route file `/server/routes/transcribe.js` for handling transcription and translation.
+- Return the translated text in JSON: `{ englishText: "..." }`.
+
+🎯 Goal:
+When the user records a note, it automatically appears in English inside the note editor area.

@@ -1,0 +1,24 @@
+# ReqGen PHP Project - Root .htaccess
+RewriteEngine On
+
+# Redirect root to login page
+RewriteCond %{REQUEST_URI} ^/reqgen/?$
+RewriteRule ^(.*)$ /reqgen/login.php [L]
+
+# Enable error reporting (disable in production)
+php_flag display_errors Off
+php_flag log_errors On
+php_value error_log logs/error.log
+
+# Session settings
+php_value session.cookie_httponly 1
+php_value session.use_only_cookies 1
+
+# Upload limits
+php_value upload_max_filesize 50M
+php_value post_max_size 50M
+
+# Protect sensitive files
+<FilesMatch "\.(env|sql|md|log)$">
+    Require all denied
+</FilesMatch>
