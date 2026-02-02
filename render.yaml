@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: reqgen-backend
+    env: python
+    buildCommand: ./python-backend/render-build.sh
+    startCommand: gunicorn --chdir python-backend app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.13
+      - key: ANTHROPIC_API_KEY
+        sync: false # User will set this in Render UI
