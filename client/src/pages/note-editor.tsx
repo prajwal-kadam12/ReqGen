@@ -1001,11 +1001,21 @@ export default function NoteEditor() {
               </div>
               <Button
                 onClick={handleGenerateDocument}
+                disabled={isGenerating}
                 className="w-full gap-2 shadow-lg bg-gradient-to-r from-primary to-accent hover:shadow-xl transition-all"
                 data-testid="button-generate-document"
               >
-                <FileText className="w-4 h-4" />
-                Generate Document
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-4 h-4" />
+                    Generate Document
+                  </>
+                )}
               </Button>
             </div>
           </CardContent>
