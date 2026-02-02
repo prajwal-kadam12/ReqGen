@@ -18,8 +18,8 @@ MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB in bytes
 ALLOWED_EXTENSIONS = {'.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.wma', '.webm'}
 
 # Model settings
-WHISPER_MODEL = "small"  # Options: tiny, base, small, medium, large
-SUMMARIZATION_MODEL = "google/flan-t5-base"
+WHISPER_MODEL = "tiny"  # Changed to tiny for Render Free Tier (512MB RAM)
+SUMMARIZATION_MODEL = "google/flan-t5-small" # Changed to small for Render Free Tier
 
 # Whisper settings
 CHUNK_LENGTH_S = 30  # Chunk length for long-form transcription
@@ -38,7 +38,7 @@ SUMMARY_MAX_WORDS = 450  # Maximum summary length for 'comprehensive'
 CHUNK_SIZE_WORDS = 400  # Words per chunk (T5 optimal)
 
 # Flask settings
-FLASK_HOST = "127.0.0.1"  # Changed from 0.0.0.0 to avoid permission issues
+FLASK_HOST = "0.0.0.0"  # Required for Render deployment
 FLASK_PORT = 5001  # Changed from 5000 to avoid conflicts
 DEBUG = os.getenv("FLASK_DEBUG", "False").lower() == "true"
 
