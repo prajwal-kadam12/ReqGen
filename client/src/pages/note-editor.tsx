@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Sparkles, FileText, Eye, Upload, Type, Mic, Square, FileAudio, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -999,24 +1000,28 @@ export default function NoteEditor() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button
-                onClick={handleGenerateDocument}
-                disabled={isGenerating}
-                className="w-full gap-2 shadow-lg bg-gradient-to-r from-primary to-accent hover:shadow-xl transition-all"
-                data-testid="button-generate-document"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <FileText className="w-4 h-4" />
-                    Generate Document
-                  </>
-                )}
-              </Button>
+              {isGenerating ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm text-muted-foreground animate-pulse">
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Generating Document...
+                    </span>
+                    <span>Please wait</span>
+                  </div>
+                  <Progress value={33} className="w-full h-2 animate-pulse" />
+                </div>
+              ) : (
+                <Button
+                  onClick={handleGenerateDocument}
+                  disabled={isGenerating}
+                  className="w-full gap-2 shadow-lg bg-gradient-to-r from-primary to-accent hover:shadow-xl transition-all"
+                  data-testid="button-generate-document"
+                >
+                  <FileText className="w-4 h-4" />
+                  Generate Document
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
