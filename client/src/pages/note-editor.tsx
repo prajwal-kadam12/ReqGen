@@ -63,9 +63,6 @@ export default function NoteEditor() {
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioStage, setAudioStage] = useState<'idle' | 'uploading' | 'transcribing' | 'complete' | 'error'>('idle');
 
-  // Python backend URL for audio transcription
-  const PYTHON_BACKEND_URL = import.meta.env.VITE_PYTHON_BACKEND_URL || 'http://localhost:5001';
-
   // Load editing document from localStorage on mount
   useEffect(() => {
     const editingDocData = localStorage.getItem('editingDocument');
@@ -303,8 +300,8 @@ export default function NoteEditor() {
       setAudioStage('transcribing');
       setAudioProgress(30);
 
-      // Call the Python backend for transcription + summarization
-      const response = await fetch(`${PYTHON_BACKEND_URL}/api/process-audio`, {
+      // Call the Python backend proxy
+      const response = await fetch(`/api/python/process-audio`, {
         method: 'POST',
         body: formData,
       });
@@ -433,7 +430,7 @@ export default function NoteEditor() {
       setAudioStage('transcribing');
       setAudioProgress(50);
 
-      const response = await fetch(`${PYTHON_BACKEND_URL}/api/process-audio`, {
+      const response = await fetch(`/api/python/process-audio`, {
         method: 'POST',
         body: formData,
       });
@@ -570,7 +567,7 @@ export default function NoteEditor() {
     console.log("Starting AI refinement via backend...");
 
     try {
-      const response = await fetch(`${PYTHON_BACKEND_URL}/api/summarize`, {
+      const response = await fetch(`/api/python/summarize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -648,7 +645,7 @@ export default function NoteEditor() {
     try {
       console.log("Generating document from Python backend:", { type: docType });
 
-      const response = await fetch(`${PYTHON_BACKEND_URL}/api/generate-document`, {
+      const response = await fetch(`/api/python/generate-document`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -36,17 +36,17 @@ const TEMP_USERS = [
 function requireRole(allowedRoles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     const userRole = req.headers['x-user-role'] as string;
-    
+
     if (!userRole) {
       res.status(401).json({ error: "Unauthorized - No user role provided" });
       return;
     }
-    
+
     if (!allowedRoles.includes(userRole)) {
       res.status(403).json({ error: "Forbidden - Insufficient permissions" });
       return;
     }
-    
+
     next();
   };
 }
@@ -333,11 +333,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Vakyansh Speech-to-Text Transcription
   const upload = multer({ storage: multer.memoryStorage() });
-  
+
   app.post("/api/vakyansh-transcribe", upload.single('audio'), async (req, res) => {
     let inputPath: string | null = null;
     let outputPath: string | null = null;
-    
+
     try {
       if (!req.file) {
         res.status(400).json({ error: "No audio file provided" });
@@ -346,18 +346,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const language = req.body.language || 'hi'; // Default to Hindi
       const audioBuffer = req.file.buffer;
-      
+
       console.log(`Vakyansh transcription request - Language: ${language}, Original audio size: ${audioBuffer.length} bytes, Format: ${req.file.mimetype}`);
 
       // Create temp files for audio conversion
       const tempDir = tmpdir();
       inputPath = path.join(tempDir, `input-${Date.now()}.webm`);
       outputPath = path.join(tempDir, `output-${Date.now()}.wav`);
-      
+
       // Write input audio to temp file
       await fs.writeFile(inputPath, audioBuffer);
       console.log(`Saved input audio to: ${inputPath}`);
-      
+
       // Convert WebM/other formats to WAV using FFmpeg
       await new Promise<void>((resolve, reject) => {
         ffmpeg(inputPath!)
@@ -374,17 +374,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .save(outputPath!);
       });
-      
+
       // Read converted WAV file
       const wavBuffer = await fs.readFile(outputPath);
       console.log(`Converted WAV size: ${wavBuffer.length} bytes`);
-      
+
       // Convert WAV buffer to base64
       const base64Audio = wavBuffer.toString('base64');
 
       // Vakyansh API endpoint
       const vakyanshUrl = `https://cdac.ulcacontrib.org/asr/v1/recognize/${language}`;
-      
+
       // Prepare Vakyansh API request
       const vakyanshPayload = {
         config: {
@@ -408,7 +408,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Call Vakyansh API with timeout
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
+
       const response = await fetch(vakyanshUrl, {
         method: 'POST',
         headers: {
@@ -417,56 +417,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         body: JSON.stringify(vakyanshPayload),
         signal: controller.signal
       });
-      
+
       clearTimeout(timeout);
 
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Vakyansh API error:', response.status, errorText);
-        res.status(500).json({ 
-          error: "Transcription service error", 
-          details: `Vakyansh API returned ${response.status}. Please try again.` 
+        res.status(500).json({
+          error: "Transcription service error",
+          details: `Vakyansh API returned ${response.status}. Please try again.`
         });
         return;
       }
 
       const result = await response.json();
       console.log('Vakyansh API response:', JSON.stringify(result, null, 2));
-      
+
       // Extract transcription from response
       const transcription = result.output?.[0]?.source || result.output?.[0]?.text || '';
-      
+
       if (!transcription) {
         console.error('No transcription in response:', result);
-        res.status(500).json({ 
-          error: "No transcription received", 
-          details: "The audio could not be transcribed. Please speak clearly and try again." 
+        res.status(500).json({
+          error: "No transcription received",
+          details: "The audio could not be transcribed. Please speak clearly and try again."
         });
         return;
       }
 
       console.log(`Transcription successful - Language: ${language}, Text: "${transcription}"`);
-      
+
       res.json({
         success: true,
         transcription,
         language: result.config?.language?.sourceLanguage || language
       });
-      
+
     } catch (error: any) {
       console.error("Vakyansh transcription error:", error);
-      
+
       let errorMessage = "Transcription failed";
       let errorDetails = error.message;
-      
+
       if (error.name === 'AbortError') {
         errorMessage = "Transcription timeout";
         errorDetails = "The transcription service took too long to respond. Please try again with shorter audio.";
       }
-      
-      res.status(500).json({ 
-        error: errorMessage, 
-        details: errorDetails 
+
+      res.status(500).json({
+        error: errorMessage,
+        details: errorDetails
       });
     } finally {
       // Clean up temp files
@@ -501,7 +501,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/notifications/:id/read", async (req, res) => {
     try {
       const userId = req.headers['x-user-id'] as string;
-      
+
       if (!userId) {
         res.status(401).json({ error: "Unauthorized - No user ID provided" });
         return;
@@ -522,7 +522,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/notifications/read-all", async (req, res) => {
     try {
       const userId = req.headers['x-user-id'] as string;
-      
+
       if (!userId) {
         res.status(401).json({ error: "Unauthorized - No user ID provided" });
         return;
@@ -533,6 +533,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       res.status(500).json({ error: "Failed to mark all notifications as read" });
     }
+  });
+
+  // Python Backend Proxy Routes
+  const pythonUrl = process.env.PYTHON_BACKEND_URL || "http://127.0.0.1:5001";
+
+  // Helper to forward JSON requests
+  const proxyJson = async (req: Request, res: Response, endpoint: string) => {
+    try {
+      console.log(`Proxying ${req.method} ${endpoint} to Python backend: ${pythonUrl}`);
+      const response = await fetch(`${pythonUrl}${endpoint}`, {
+        method: req.method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(req.body),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Python backend error execution ${endpoint}: ${response.status} ${errorText}`);
+        res.status(response.status).send(errorText);
+        return;
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error(`Proxy error for ${endpoint}:`, error);
+      res.status(500).json({ error: "Failed to communicate with Python backend", details: error.message });
+    }
+  };
+
+  // Helper to forward Multipart/File requests
+  const proxyFile = async (req: Request, res: Response, endpoint: string) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: "No file provided" });
+        return;
+      }
+
+      console.log(`Proxying file upload ${endpoint} to Python backend: ${pythonUrl}`);
+
+      const formData = new FormData();
+      const fileBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
+      formData.append('audio', fileBlob, req.file.originalname);
+
+      // Append other body fields
+      Object.keys(req.body).forEach(key => {
+        formData.append(key, req.body[key]);
+      });
+
+      const response = await fetch(`${pythonUrl}${endpoint}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Python backend error on ${endpoint}: ${response.status} ${errorText}`);
+        res.status(response.status).send(errorText);
+        return;
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error(`Proxy file error for ${endpoint}:`, error);
+      res.status(500).json({ error: "Failed to communicate with Python backend", details: error.message });
+    }
+  };
+
+  app.post("/api/python/process-audio", upload.single('audio'), (req, res) => {
+    proxyFile(req, res, "/api/process-audio");
+  });
+
+  app.post("/api/python/transcribe", upload.single('audio'), (req, res) => {
+    proxyFile(req, res, "/api/transcribe");
+  });
+
+  app.post("/api/python/summarize", (req, res) => {
+    proxyJson(req, res, "/api/summarize");
+  });
+
+  app.post("/api/python/generate-document", (req, res) => {
+    proxyJson(req, res, "/api/generate-document");
   });
 
   const httpServer = createServer(app);
