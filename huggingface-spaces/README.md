@@ -9,7 +9,7 @@ pinned: false
 
 # ReqGen AI Backend
 
-Audio transcription (Whisper) + Text summarization (T5) REST API.
+Audio transcription (Whisper) + Text summarization (DistilBART) REST API.
 
 ## Endpoints
 
