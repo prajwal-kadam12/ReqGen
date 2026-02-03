@@ -24,6 +24,12 @@ def allowed_file(filename):
     """Check if file has an allowed extension"""
     return Path(filename).suffix.lower() in config.ALLOWED_EXTENSIONS
 
+@app.route('/', methods=['GET'])
+def index():
+    """Root endpoint to verify backend is running"""
+    print("Health check probe received at root /")
+    return "Python Backend is Running! Access /api/health for status.", 200
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
