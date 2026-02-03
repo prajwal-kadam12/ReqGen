@@ -4,26 +4,36 @@ Audio transcription (Whisper) + Text summarization (T5) + Document generation
 """
 import os
 import gc
-import re
-import ssl
 import json
-import tempfile
 import traceback
 import warnings
 from datetime import datetime
-from pathlib import Path
 
-import torch
-import whisper
-import gradio as gr
-from transformers import T5Tokenizer, T5ForConditionalGeneration
-
-# Bypass SSL verification for model downloads
-ssl._create_default_https_context = ssl._create_unverified_context
 warnings.filterwarnings('ignore')
 
+# Lazy imports to avoid startup crashes
+torch = None
+whisper = None
+gr = None
+T5Tokenizer = None
+T5ForConditionalGeneration = None
+
+def lazy_imports():
+    """Import heavy libraries only when needed"""
+    global torch, whisper, gr, T5Tokenizer, T5ForConditionalGeneration
+    if torch is None:
+        import torch as _torch
+        torch = _torch
+    if whisper is None:
+        import whisper as _whisper
+        whisper = _whisper
+    if T5Tokenizer is None:
+        from transformers import T5Tokenizer as _T5Tokenizer, T5ForConditionalGeneration as _T5ForConditionalGeneration
+        T5Tokenizer = _T5Tokenizer
+        T5ForConditionalGeneration = _T5ForConditionalGeneration
+
 # Configuration
-WHISPER_MODEL = "tiny"  # Smallest for faster loading
+WHISPER_MODEL = "tiny"  # Smallest for faster loading on CPU
 T5_MODEL = "google/flan-t5-small"  # Small but capable
 
 # Global model cache
@@ -33,14 +43,16 @@ _t5_model = None
 _device = None
 
 def get_device():
-    global _device
+    global _device, torch
+    lazy_imports()
     if _device is None:
         _device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"Device: {_device}")
     return _device
 
 def get_whisper_model():
-    global _whisper_model
+    global _whisper_model, whisper
+    lazy_imports()
     if _whisper_model is None:
         print(f"Loading Whisper {WHISPER_MODEL}...")
         _whisper_model = whisper.load_model(WHISPER_MODEL, device=get_device())
@@ -48,7 +60,8 @@ def get_whisper_model():
     return _whisper_model
 
 def get_t5_model():
-    global _t5_tokenizer, _t5_model
+    global _t5_tokenizer, _t5_model, torch
+    lazy_imports()
     if _t5_tokenizer is None:
         print(f"Loading T5 {T5_MODEL}...")
         _t5_tokenizer = T5Tokenizer.from_pretrained(T5_MODEL)
@@ -82,6 +95,7 @@ def transcribe_audio(audio_path):
 def summarize_text(text, strategy="balanced", quality="medium"):
     """Summarize text using T5"""
     try:
+        lazy_imports()
         if not text or len(text.strip()) < 10:
             return json.dumps({"error": "Text too short to summarize"})
         
@@ -99,9 +113,9 @@ def summarize_text(text, strategy="balanced", quality="medium"):
             outputs = model.generate(
                 inputs,
                 max_length=256,
-                min_length=50,
-                num_beams=4,
-                length_penalty=2.0,
+                min_length=20,
+                num_beams=2,
+                length_penalty=1.0,
                 early_stopping=True
             )
         
@@ -122,6 +136,7 @@ def summarize_text(text, strategy="balanced", quality="medium"):
 def process_audio(audio_path, strategy="balanced", quality="medium"):
     """Combined transcription + summarization"""
     try:
+        lazy_imports()
         if audio_path is None:
             return json.dumps({"error": "No audio file provided"})
         
@@ -130,23 +145,25 @@ def process_audio(audio_path, strategy="balanced", quality="medium"):
         result = model.transcribe(audio_path, language=None)
         transcript = result["text"]
         
-        # Step 2: Summarize
-        tokenizer, t5_model = get_t5_model()
-        prompt = f"summarize: {transcript}"
-        inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=512, truncation=True)
-        inputs = inputs.to(get_device())
-        
-        with torch.no_grad():
-            outputs = t5_model.generate(
-                inputs,
-                max_length=256,
-                min_length=50,
-                num_beams=4,
-                length_penalty=2.0,
-                early_stopping=True
-            )
-        
-        summary = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # Step 2: Summarize (only if transcript is long enough)
+        summary = transcript
+        if len(transcript.split()) > 20:
+            tokenizer, t5_model = get_t5_model()
+            prompt = f"summarize: {transcript}"
+            inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=512, truncation=True)
+            inputs = inputs.to(get_device())
+            
+            with torch.no_grad():
+                outputs = t5_model.generate(
+                    inputs,
+                    max_length=256,
+                    min_length=20,
+                    num_beams=2,
+                    length_penalty=1.0,
+                    early_stopping=True
+                )
+            
+            summary = tokenizer.decode(outputs[0], skip_special_tokens=True)
         
         return json.dumps({
             "success": True,
@@ -238,10 +255,11 @@ def health_check():
         "status": "healthy",
         "message": "ReqGen AI Backend is running on Hugging Face Spaces",
         "backend": "Whisper + T5",
-        "device": get_device()
+        "models": {"whisper": WHISPER_MODEL, "t5": T5_MODEL}
     })
 
 # ===== Gradio Interface =====
+import gradio as gr
 
 with gr.Blocks(title="ReqGen AI Backend") as demo:
     gr.Markdown("# 🎙️ ReqGen AI Backend")

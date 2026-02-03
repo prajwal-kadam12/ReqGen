@@ -1,10 +1,22 @@
-# Hugging Face Spaces Requirements
-gradio>=4.0.0
-torch
-openai-whisper
-transformers
-sentencepiece
+# Hugging Face Spaces Requirements for ReqGen AI Backend
 
-# Core packages
+# Core ML/AI
+torch
+transformers>=4.30.0
+sentencepiece
+accelerate
+
+# Whisper for speech recognition
+git+https://github.com/openai/whisper.git
+
+# Audio processing
+ffmpeg-python
+librosa
+soundfile
+
+# Gradio interface
+gradio>=4.0.0
+
+# Utilities
 numpy
 scipy
