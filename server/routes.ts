@@ -735,39 +735,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
-} else {
-  // Standard backend health check
-  const healthUrl = `${pythonUrl}/api/health`;
-  const response = await fetch(healthUrl);
-  const bodyText = await response.text();
-  let bodyJson = { error: "Invalid JSON response" };
-  try {
-    bodyJson = JSON.parse(bodyText);
-  } catch (e) {
-    // Ignore
-  }
-
-  res.json({
-    configuredUrl: pythonUrl,
-    rawEnvVar: process.env.PYTHON_BACKEND_URL,
-    isHuggingFace: false,
-    targetEndpoint: healthUrl,
-    status: response.status,
-    statusText: response.statusText,
-    backendResponse: bodyJson
-  });
-}
-    } catch (error: any) {
-  console.error("[Debug] Error:", error);
-  res.status(500).json({
-    configuredUrl: pythonUrl,
-    rawEnvVar: process.env.PYTHON_BACKEND_URL,
-    isHuggingFace,
-    error: error.message,
-    details: "Failed to connect to backend"
-  });
-}
-  });
+});
 
 const httpServer = createServer(app);
 
