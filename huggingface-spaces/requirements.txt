@@ -1,4 +1,9 @@
 # Hugging Face Spaces Requirements for ReqGen AI Backend
+# Pin versions to avoid compatibility issues
+
+# Gradio with compatible huggingface_hub
+gradio==4.44.0
+huggingface_hub>=0.20.0,<0.25.0
 
 # Core ML/AI
 torch
@@ -14,9 +19,6 @@ ffmpeg-python
 librosa
 soundfile
 
-# Gradio interface
-gradio>=4.0.0
-
 # Utilities
-numpy
+numpy<2.0.0
 scipy
