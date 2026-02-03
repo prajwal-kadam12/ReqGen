@@ -621,6 +621,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     proxyJson(req, res, "/api/generate-document");
   });
 
+  app.get("/api/debug-proxy", async (req, res) => {
+    try {
+      console.log("Debugging proxy connection...");
+      const healthUrl = `${pythonUrl}/api/health`;
+      console.log(`Attempting to fetch: ${healthUrl}`);
+
+      const response = await fetch(healthUrl);
+      const data = await response.json().catch(() => ({ error: "Invalid JSON response" }));
+      const text = await response.text().catch(() => "No text");
+
+      res.json({
+        configuredUrl: pythonUrl,
+        rawEnvVar: process.env.PYTHON_BACKEND_URL,
+        targetEndpoint: healthUrl,
+        status: response.status,
+        statusText: response.statusText,
+        backendResponse: data,
+        backendResponseText: text
+      });
+    } catch (error: any) {
+      console.error("Debug proxy error:", error);
+      res.status(500).json({
+        configuredUrl: pythonUrl,
+        rawEnvVar: process.env.PYTHON_BACKEND_URL,
+        error: error.message,
+        details: "Failed to connect to Python backend"
+      });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
