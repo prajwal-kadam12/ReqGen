@@ -34,6 +34,20 @@ SUMMARIZATION_MODEL = "sshleifer/distilbart-cnn-12-6" # Lighter & Faster (Fixes 
 _whisper_model = None
 _summarizer_pipeline = None
 
+def check_ffmpeg():
+    """Verify ffmpeg is installed and available"""
+    import subprocess
+    try:
+        subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("✅ FFmpeg is available")
+        return True
+    except FileNotFoundError:
+        print("❌ ERROR: FFmpeg is NOT installed or not in PATH. Audio processing will fail.")
+        return False
+
+# Run check on startup
+check_ffmpeg()
+
 def get_whisper():
     global _whisper_model
     if _whisper_model is None:
