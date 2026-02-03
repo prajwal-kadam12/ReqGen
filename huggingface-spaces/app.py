@@ -105,8 +105,8 @@ async def summarize(
             raise HTTPException(status_code=400, detail="Text too short")
         
         tokenizer, model = get_t5()
-        # "summarize: " is standard for T5-flan
-        prompt = f"summarize: {text}" 
+        # "summarize: " is standard for T5-flan, but we want detail
+        prompt = f"detailed summary: {text}" 
         inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=1024, truncation=True)
         
         with torch.no_grad():
@@ -114,10 +114,10 @@ async def summarize(
                 inputs, 
                 max_length=300, 
                 min_length=50, 
-                num_beams=4,
-                repetition_penalty=2.0,     # Reduced slightly from 2.5
+                num_beams=2,                # Back to 2 for speed/memory
+                repetition_penalty=2.0,     # Keep penalty
                 no_repeat_ngram_size=3,     
-                length_penalty=1.5,         # Encourage longer output
+                length_penalty=2.0,         # Stronger length encouragement
                 early_stopping=True
             )
         
@@ -165,17 +165,17 @@ async def process_audio(
         summary = transcript
         if len(transcript.split()) > 30:
             tokenizer, t5_model = get_t5()
-            prompt = f"summarize: {transcript}"
+            prompt = f"detailed summary: {transcript}"
             inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=1024, truncation=True)
             with torch.no_grad():
                 outputs = t5_model.generate(
                     inputs, 
                     max_length=300, 
                     min_length=50, 
-                    num_beams=4, 
+                    num_beams=2,            # Back to 2
                     repetition_penalty=2.0, 
                     no_repeat_ngram_size=3,
-                    length_penalty=1.5,
+                    length_penalty=2.0,
                     early_stopping=True
                 )
             summary = tokenizer.decode(outputs[0], skip_special_tokens=True)
