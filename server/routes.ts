@@ -575,6 +575,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log(`Proxying file upload ${endpoint} to Python backend: ${pythonUrl}`);
+      console.log(`File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
 
       const formData = new FormData();
       const fileBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
@@ -585,20 +586,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         formData.append(key, req.body[key]);
       });
 
+      console.log(`Sending request to: ${pythonUrl}${endpoint}`);
       const response = await fetch(`${pythonUrl}${endpoint}`, {
         method: 'POST',
         body: formData,
       });
 
+      console.log(`Python backend response status: ${response.status}`);
+      const responseText = await response.text();
+      console.log(`Python backend response (first 500 chars): ${responseText.substring(0, 500)}`);
+
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Python backend error on ${endpoint}: ${response.status} ${errorText}`);
-        res.status(response.status).send(errorText);
+        console.error(`Python backend error on ${endpoint}: ${response.status}`);
+        res.status(response.status).json({
+          error: "Python backend error",
+          status: response.status,
+          details: responseText.substring(0, 1000)
+        });
         return;
       }
 
-      const data = await response.json();
-      res.json(data);
+      // Try to parse as JSON
+      try {
+        const data = JSON.parse(responseText);
+        res.json(data);
+      } catch (parseError) {
+        console.error("Failed to parse Python response as JSON:", responseText.substring(0, 200));
+        res.status(500).json({
+          error: "Invalid JSON from Python backend",
+          rawResponse: responseText.substring(0, 500)
+        });
+      }
     } catch (error: any) {
       console.error(`Proxy file error for ${endpoint}:`, error);
       res.status(500).json({ error: "Failed to communicate with Python backend", details: error.message });
