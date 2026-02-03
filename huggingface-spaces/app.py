@@ -28,7 +28,7 @@ app.add_middleware(
 
 # Configuration
 WHISPER_MODEL = "tiny"
-SUMMARIZATION_MODEL = "facebook/bart-large-cnn" # Superior quality for summarization
+SUMMARIZATION_MODEL = "sshleifer/distilbart-cnn-12-6" # Lighter & Faster (Fixes timeouts)
 
 # Global cache
 _whisper_model = None
@@ -116,15 +116,13 @@ async def summarize(
             
         print(f"Summarizing {input_len} words. Max: {max_len}, Min: {min_len}, Beams: {num_beams}")
 
-        # BART Pipeline handles large text automatically by truncation usually, 
-        # but for very large text (>1024 tokens), we might need chunking. 
-        # For now, relying on pipeline's truncation=True default.
+        # DistilBART is robust, let's use reasonable defaults
+        # Truncation is handled by pipeline
         output = summarizer(
             text, 
-            max_length=max_len, 
-            min_length=min_len, 
+            max_length=250, 
+            min_length=40, 
             do_sample=False, 
-            num_beams=num_beams,
             truncation=True
         )
         
@@ -183,10 +181,9 @@ async def process_audio(
             
             output = summarizer(
                 transcript, 
-                max_length=max_len, 
-                min_length=min_len, 
+                max_length=250, 
+                min_length=40, 
                 do_sample=False, 
-                num_beams=2,
                 truncation=True
             )
             summary = output[0]['summary_text']
