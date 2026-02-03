@@ -562,16 +562,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Proxy] Error: ${response.status} ${errorText}`);
-        res.status(response.status).send(errorText);
+        console.error(`[Proxy File] Error from ${pythonUrl}${endpoint}:`);
+        console.error(`Status: ${response.status} ${response.statusText}`);
+        console.error(`Body: ${errorText}`);
+        res.status(response.status).send(errorText || "Backend File Upload Error");
         return;
       }
 
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
-      console.error(`[Proxy] Error:`, error);
-      res.status(500).json({ error: "Backend communication failed", details: error.message });
+      console.error(`[Proxy File] Network/Server Error connecting to ${pythonUrl}${endpoint}:`, error);
+      res.status(502).json({
+        error: "Backend communication failed",
+        details: error.message,
+        url: `${pythonUrl}${endpoint}`
+      });
     }
   };
 
@@ -595,16 +601,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Proxy] Error: ${response.status} ${errorText}`);
-        res.status(response.status).send(errorText);
+        console.error(`[Proxy] Error from ${pythonUrl}${endpoint}:`);
+        console.error(`Status: ${response.status} ${response.statusText}`);
+        console.error(`Body: ${errorText}`);
+        res.status(response.status).send(errorText || "Backend Error");
         return;
       }
 
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
-      console.error(`[Proxy] Error:`, error);
-      res.status(500).json({ error: "Backend communication failed", details: error.message });
+      console.error(`[Proxy] Network/Server Error connecting to ${pythonUrl}${endpoint}:`, error);
+      res.status(502).json({
+        error: "Backend communication failed",
+        details: error.message,
+        url: `${pythonUrl}${endpoint}`
+      });
     }
   };
 
