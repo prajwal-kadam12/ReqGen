@@ -30,38 +30,66 @@ app.add_middleware(
 WHISPER_MODEL = "tiny"
 SUMMARIZATION_MODEL = "sshleifer/distilbart-cnn-12-6" # Lighter & Faster (Fixes timeouts)
 
-# Global cache
+# Global cache - ONLY ONE at a time for free tier
 _whisper_model = None
 _summarizer_pipeline = None
 
 def get_whisper():
-    global _whisper_model
+    global _whisper_model, _summarizer_pipeline
+    import gc, torch
+    
+    # 1. Unload Summarizer if present
+    if _summarizer_pipeline is not None:
+        print("Unloading Summarizer to free RAM...")
+        del _summarizer_pipeline
+        _summarizer_pipeline = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    # 2. Load Whisper if not present
     if _whisper_model is None:
         import whisper
         print(f"Loading Whisper {WHISPER_MODEL}...")
         _whisper_model = whisper.load_model(WHISPER_MODEL)
         print("Whisper loaded!")
+    
     return _whisper_model
 
 def get_summarizer():
-    global _summarizer_pipeline
+    global _whisper_model, _summarizer_pipeline
+    import gc, torch
+    
+    # 1. Unload Whisper if present
+    if _whisper_model is not None:
+        print("Unloading Whisper to free RAM...")
+        del _whisper_model
+        _whisper_model = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
+    # 2. Load Summarizer if not present
     if _summarizer_pipeline is None:
         from transformers import pipeline
         print(f"Loading Summarizer {SUMMARIZATION_MODEL}...")
-        # Use pipeline for BART - simplifies everything (tokenization + generation)
         _summarizer_pipeline = pipeline("summarization", model=SUMMARIZATION_MODEL)
         print("Summarizer loaded!")
+    
     return _summarizer_pipeline
 
 # ===== API Endpoints =====
 
 @app.get("/")
 def root():
-    return {"status": "healthy", "message": "ReqGen AI Backend (Whisper + BART)", "version": "3.0"}
+    return {"status": "healthy", "message": "ReqGen AI Backend (Memory Optimized)", "version": "3.1"}
 
 @app.get("/api/health")
 def health():
-    return {"status": "healthy", "models": {"whisper": WHISPER_MODEL, "summarizer": SUMMARIZATION_MODEL}}
+    return {
+        "status": "healthy", 
+        "active_model": "whisper" if _whisper_model else "summarizer" if _summarizer_pipeline else "none"
+    }
 
 @app.post("/api/transcribe")
 async def transcribe(audio: UploadFile = File(...)):
