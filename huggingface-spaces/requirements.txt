@@ -1,24 +1,24 @@
-# Hugging Face Spaces Requirements for ReqGen AI Backend
-# Pin versions to avoid compatibility issues
+# Hugging Face Spaces - FastAPI Backend
+# NO GRADIO - Using FastAPI for reliability
 
-# Gradio with compatible huggingface_hub
-gradio==4.44.0
-huggingface_hub>=0.20.0,<0.25.0
+fastapi
+uvicorn[standard]
+python-multipart
 
-# Core ML/AI
+# ML/AI
 torch
 transformers>=4.30.0
 sentencepiece
 accelerate
 
-# Whisper for speech recognition
+# Whisper
 git+https://github.com/openai/whisper.git
 
-# Audio processing
+# Audio
 ffmpeg-python
 librosa
 soundfile
 
-# Utilities
+# Utils
 numpy<2.0.0
 scipy
