@@ -105,11 +105,21 @@ async def summarize(
             raise HTTPException(status_code=400, detail="Text too short")
         
         tokenizer, model = get_t5()
-        prompt = f"summarize: {text}"
-        inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=512, truncation=True)
+        # "summarize: " is standard for T5-flan
+        prompt = f"summarize: {text}" 
+        inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=1024, truncation=True)
         
         with torch.no_grad():
-            outputs = model.generate(inputs, max_length=150, min_length=20, num_beams=2)
+            outputs = model.generate(
+                inputs, 
+                max_length=200, 
+                min_length=40, 
+                num_beams=4,
+                repetition_penalty=2.5,     # Penalty for repeating words
+                no_repeat_ngram_size=3,     # Prevent repeating 3-word phrases
+                length_penalty=1.0,         # Encourage reasonable length
+                early_stopping=True
+            )
         
         summary = tokenizer.decode(outputs[0], skip_special_tokens=True)
         
@@ -153,12 +163,21 @@ async def process_audio(
         
         # Summarize if long enough
         summary = transcript
-        if len(transcript.split()) > 15:
+        if len(transcript.split()) > 30:
             tokenizer, t5_model = get_t5()
             prompt = f"summarize: {transcript}"
-            inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=512, truncation=True)
+            inputs = tokenizer.encode(prompt, return_tensors="pt", max_length=1024, truncation=True)
             with torch.no_grad():
-                outputs = t5_model.generate(inputs, max_length=150, min_length=20, num_beams=2)
+                outputs = t5_model.generate(
+                    inputs, 
+                    max_length=200, 
+                    min_length=40, 
+                    num_beams=4, 
+                    repetition_penalty=2.5, 
+                    no_repeat_ngram_size=3,
+                    length_penalty=1.0,
+                    early_stopping=True
+                )
             summary = tokenizer.decode(outputs[0], skip_special_tokens=True)
         
         return {
