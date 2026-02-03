@@ -536,7 +536,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Python Backend Proxy Routes
-  const pythonUrl = process.env.PYTHON_BACKEND_URL || "http://127.0.0.1:5001";
+  const rawPythonUrl = process.env.PYTHON_BACKEND_URL || "http://127.0.0.1:5001";
+  const pythonUrl = rawPythonUrl.endsWith('/') ? rawPythonUrl.slice(0, -1) : rawPythonUrl;
 
   // Helper to forward JSON requests
   const proxyJson = async (req: Request, res: Response, endpoint: string) => {
