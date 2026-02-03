@@ -39,7 +39,7 @@ CHUNK_SIZE_WORDS = 400  # Words per chunk (T5 optimal)
 
 # Flask settings
 FLASK_HOST = "0.0.0.0"  # Required for Render deployment
-FLASK_PORT = 5001  # Changed from 5000 to avoid conflicts
+FLASK_PORT = int(os.environ.get("PORT", 5001))  # Use Render's PORT or default to 5001
 DEBUG = os.getenv("FLASK_DEBUG", "False").lower() == "true"
 
 # CORS settings - Allow requests from the frontend
