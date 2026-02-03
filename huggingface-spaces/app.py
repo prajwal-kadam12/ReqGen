@@ -28,7 +28,7 @@ app.add_middleware(
 
 # Configuration
 WHISPER_MODEL = "tiny"
-T5_MODEL = "google/flan-t5-small"
+T5_MODEL = "google/flan-t5-base" # Upgraded from small for better quality
 
 # Global cache
 _whisper_model = None
@@ -112,12 +112,12 @@ async def summarize(
         with torch.no_grad():
             outputs = model.generate(
                 inputs, 
-                max_length=200, 
-                min_length=40, 
+                max_length=300, 
+                min_length=50, 
                 num_beams=4,
-                repetition_penalty=2.5,     # Penalty for repeating words
-                no_repeat_ngram_size=3,     # Prevent repeating 3-word phrases
-                length_penalty=1.0,         # Encourage reasonable length
+                repetition_penalty=2.0,     # Reduced slightly from 2.5
+                no_repeat_ngram_size=3,     
+                length_penalty=1.5,         # Encourage longer output
                 early_stopping=True
             )
         
@@ -170,12 +170,12 @@ async def process_audio(
             with torch.no_grad():
                 outputs = t5_model.generate(
                     inputs, 
-                    max_length=200, 
-                    min_length=40, 
+                    max_length=300, 
+                    min_length=50, 
                     num_beams=4, 
-                    repetition_penalty=2.5, 
+                    repetition_penalty=2.0, 
                     no_repeat_ngram_size=3,
-                    length_penalty=1.0,
+                    length_penalty=1.5,
                     early_stopping=True
                 )
             summary = tokenizer.decode(outputs[0], skip_special_tokens=True)
