@@ -39,6 +39,24 @@ def health_check():
         'backend': 'SmartT5LargeDocumentGenerator'
     }), 200
 
+@app.route('/api/test-upload', methods=['POST'])
+def test_upload():
+    """Simple test endpoint to verify file upload works without AI"""
+    try:
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio file provided', 'files_received': list(request.files.keys())}), 400
+        
+        file = request.files['audio']
+        return jsonify({
+            'success': True,
+            'message': 'File received successfully (no AI processing)',
+            'filename': file.filename,
+            'content_type': file.content_type,
+            'size': len(file.read())
+        }), 200
+    except Exception as e:
+        return jsonify({'error': 'Test upload failed', 'details': str(e)}), 500
+
 @app.route('/api/transcribe', methods=['POST'])
 def transcribe_audio():
     """

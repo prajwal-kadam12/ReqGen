@@ -631,6 +631,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     proxyFile(req, res, "/api/transcribe");
   });
 
+  app.post("/api/python/test-upload", upload.single('audio'), (req, res) => {
+    proxyFile(req, res, "/api/test-upload");
+  });
+
   app.post("/api/python/summarize", (req, res) => {
     proxyJson(req, res, "/api/summarize");
   });
