@@ -1,0 +1,10 @@
+# Hugging Face Spaces Requirements
+gradio>=4.0.0
+torch
+openai-whisper
+transformers
+sentencepiece
+
+# Core packages
+numpy
+scipy

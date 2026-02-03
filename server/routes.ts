@@ -535,25 +535,126 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Python Backend Proxy Routes
+  // ============================================================
+  // HUGGING FACE SPACES / GRADIO API INTEGRATION
+  // ============================================================
+  // Set PYTHON_BACKEND_URL to your HF Spaces URL:
+  // Example: https://YOUR-USERNAME-reqgen-ai.hf.space
+  // ============================================================
+
   const rawPythonUrl = process.env.PYTHON_BACKEND_URL || "http://127.0.0.1:5001";
   const pythonUrl = rawPythonUrl.endsWith('/') ? rawPythonUrl.slice(0, -1) : rawPythonUrl;
 
-  // Helper to forward JSON requests
+  // Check if using Hugging Face Spaces (uses Gradio API format)
+  const isHuggingFace = rawPythonUrl.includes('.hf.space') || rawPythonUrl.includes('huggingface');
+
+  console.log(`[AI Backend] URL: ${pythonUrl}`);
+  console.log(`[AI Backend] Using Hugging Face Spaces: ${isHuggingFace}`);
+
+  // ============================================================
+  // GRADIO API HELPER FUNCTIONS (for Hugging Face Spaces)
+  // ============================================================
+
+  /**
+   * Call a Gradio API endpoint on Hugging Face Spaces
+   * Gradio uses a specific API format: POST /call/{fn_index} then GET /call/{fn_index}/{event_id}
+   */
+  const callGradioApi = async (fnIndex: number, inputs: any[]): Promise<any> => {
+    try {
+      console.log(`[Gradio] Calling function index ${fnIndex} at ${pythonUrl}`);
+
+      // Step 1: Submit the request
+      const submitResponse = await fetch(`${pythonUrl}/call/${fnIndex}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: inputs })
+      });
+
+      if (!submitResponse.ok) {
+        const errorText = await submitResponse.text();
+        console.error(`[Gradio] Submit failed: ${submitResponse.status} ${errorText}`);
+        throw new Error(`Gradio API error: ${submitResponse.status}`);
+      }
+
+      const submitData = await submitResponse.json();
+      const eventId = submitData.event_id;
+      console.log(`[Gradio] Event ID: ${eventId}`);
+
+      // Step 2: Get the result (SSE stream, but we just need the final data)
+      const resultResponse = await fetch(`${pythonUrl}/call/${fnIndex}/${eventId}`);
+
+      if (!resultResponse.ok) {
+        throw new Error(`Gradio result fetch failed: ${resultResponse.status}`);
+      }
+
+      // Parse SSE response - the data comes as "data: {...}\n\n"
+      const resultText = await resultResponse.text();
+      console.log(`[Gradio] Raw result: ${resultText.substring(0, 500)}`);
+
+      // Find the last "data:" line which contains the final result
+      const dataLines = resultText.split('\n').filter(line => line.startsWith('data:'));
+      if (dataLines.length === 0) {
+        throw new Error('No data received from Gradio');
+      }
+
+      const lastDataLine = dataLines[dataLines.length - 1];
+      const jsonStr = lastDataLine.substring(5).trim(); // Remove "data:" prefix
+      const result = JSON.parse(jsonStr);
+
+      console.log(`[Gradio] Parsed result:`, result);
+      return result;
+    } catch (error: any) {
+      console.error(`[Gradio] API error:`, error);
+      throw error;
+    }
+  };
+
+  /**
+   * Upload file to Gradio and get file URL
+   */
+  const uploadToGradio = async (fileBuffer: Buffer, filename: string, mimetype: string): Promise<string> => {
+    console.log(`[Gradio] Uploading file: ${filename} (${fileBuffer.length} bytes)`);
+
+    const formData = new FormData();
+    const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimetype });
+    formData.append('files', blob, filename);
+
+    const uploadResponse = await fetch(`${pythonUrl}/upload`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(`File upload failed: ${uploadResponse.status}`);
+    }
+
+    const uploadResult = await uploadResponse.json();
+    console.log(`[Gradio] Upload result:`, uploadResult);
+
+    // Gradio returns an array of file paths
+    if (Array.isArray(uploadResult) && uploadResult.length > 0) {
+      return uploadResult[0]; // Return the file path/URL
+    }
+
+    throw new Error('No file path returned from upload');
+  };
+
+  // ============================================================
+  // STANDARD PYTHON BACKEND PROXY HELPERS
+  // ============================================================
+
   const proxyJson = async (req: Request, res: Response, endpoint: string) => {
     try {
-      console.log(`Proxying ${req.method} ${endpoint} to Python backend: ${pythonUrl}`);
+      console.log(`[Proxy] ${req.method} ${endpoint} -> ${pythonUrl}`);
       const response = await fetch(`${pythonUrl}${endpoint}`, {
         method: req.method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(req.body),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`Python backend error execution ${endpoint}: ${response.status} ${errorText}`);
+        console.error(`[Proxy] Error: ${response.status} ${errorText}`);
         res.status(response.status).send(errorText);
         return;
       }
@@ -561,12 +662,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
-      console.error(`Proxy error for ${endpoint}:`, error);
-      res.status(500).json({ error: "Failed to communicate with Python backend", details: error.message });
+      console.error(`[Proxy] Error:`, error);
+      res.status(500).json({ error: "Backend communication failed", details: error.message });
     }
   };
 
-  // Helper to forward Multipart/File requests
   const proxyFile = async (req: Request, res: Response, endpoint: string) => {
     try {
       if (!req.file) {
@@ -574,106 +674,310 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      console.log(`Proxying file upload ${endpoint} to Python backend: ${pythonUrl}`);
-      console.log(`File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
+      console.log(`[Proxy] File upload ${endpoint}: ${req.file.originalname} (${req.file.size} bytes)`);
 
       const formData = new FormData();
-      const fileBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
+      const fileBlob = new Blob([new Uint8Array(req.file.buffer)], { type: req.file.mimetype });
       formData.append('audio', fileBlob, req.file.originalname);
 
-      // Append other body fields
       Object.keys(req.body).forEach(key => {
         formData.append(key, req.body[key]);
       });
 
-      console.log(`Sending request to: ${pythonUrl}${endpoint}`);
       const response = await fetch(`${pythonUrl}${endpoint}`, {
         method: 'POST',
         body: formData,
       });
 
-      console.log(`Python backend response status: ${response.status}`);
       const responseText = await response.text();
-      console.log(`Python backend response (first 500 chars): ${responseText.substring(0, 500)}`);
+      console.log(`[Proxy] Response: ${response.status}`);
 
       if (!response.ok) {
-        console.error(`Python backend error on ${endpoint}: ${response.status}`);
         res.status(response.status).json({
-          error: "Python backend error",
+          error: "Backend error",
           status: response.status,
           details: responseText.substring(0, 1000)
         });
         return;
       }
 
-      // Try to parse as JSON
       try {
         const data = JSON.parse(responseText);
         res.json(data);
-      } catch (parseError) {
-        console.error("Failed to parse Python response as JSON:", responseText.substring(0, 200));
+      } catch {
         res.status(500).json({
-          error: "Invalid JSON from Python backend",
+          error: "Invalid JSON from backend",
           rawResponse: responseText.substring(0, 500)
         });
       }
     } catch (error: any) {
-      console.error(`Proxy file error for ${endpoint}:`, error);
-      res.status(500).json({ error: "Failed to communicate with Python backend", details: error.message });
+      console.error(`[Proxy] File error:`, error);
+      res.status(500).json({ error: "Backend communication failed", details: error.message });
     }
   };
 
-  app.post("/api/python/process-audio", upload.single('audio'), (req, res) => {
-    proxyFile(req, res, "/api/process-audio");
-  });
+  // ============================================================
+  // API ROUTES - Smart routing between HF Spaces and local backend
+  // ============================================================
 
-  app.post("/api/python/transcribe", upload.single('audio'), (req, res) => {
-    proxyFile(req, res, "/api/transcribe");
-  });
-
-  app.post("/api/python/test-upload", upload.single('audio'), (req, res) => {
-    proxyFile(req, res, "/api/test-upload");
-  });
-
-  app.post("/api/python/summarize", (req, res) => {
-    proxyJson(req, res, "/api/summarize");
-  });
-
-  app.post("/api/python/generate-document", (req, res) => {
-    proxyJson(req, res, "/api/generate-document");
-  });
-
-  app.get("/api/debug-proxy", async (req, res) => {
+  /**
+   * Process Audio - Transcription + Summarization
+   * HF Spaces Gradio function index: 2 (third tab in Gradio interface)
+   */
+  app.post("/api/python/process-audio", upload.single('audio'), async (req, res) => {
     try {
-      console.log("Debugging proxy connection...");
-      const healthUrl = `${pythonUrl}/api/health`;
-      console.log(`Attempting to fetch: ${healthUrl}`);
-
-      const response = await fetch(healthUrl);
-      const bodyText = await response.text();
-      let bodyJson = { error: "Invalid JSON response" };
-      try {
-        bodyJson = JSON.parse(bodyText);
-      } catch (e) {
-        // Ignore JSON parse error, we have text
+      if (!req.file) {
+        res.status(400).json({ error: "No audio file provided" });
+        return;
       }
 
-      res.json({
-        configuredUrl: pythonUrl,
-        rawEnvVar: process.env.PYTHON_BACKEND_URL,
-        targetEndpoint: healthUrl,
-        status: response.status,
-        statusText: response.statusText,
-        backendResponse: bodyJson,
-        backendResponseText: bodyText
-      });
+      if (isHuggingFace) {
+        console.log(`[HF Spaces] Processing audio: ${req.file.originalname}`);
+
+        // Upload file to Gradio first
+        const filePath = await uploadToGradio(req.file.buffer, req.file.originalname, req.file.mimetype);
+
+        // Call process_audio function (fn_index 2 based on tab order)
+        // Inputs: audio_file, strategy, quality
+        const strategy = req.body.strategy || "balanced";
+        const quality = req.body.quality || "medium";
+
+        const result = await callGradioApi(2, [filePath, strategy, quality]);
+
+        // Parse the JSON result from Gradio
+        if (result && Array.isArray(result) && result.length > 0) {
+          const jsonResponse = JSON.parse(result[0]);
+
+          if (jsonResponse.error) {
+            res.status(500).json({ error: jsonResponse.error });
+            return;
+          }
+
+          res.json({
+            success: true,
+            transcript: jsonResponse.transcript,
+            summary: jsonResponse.summary,
+            language: jsonResponse.language,
+            language_name: jsonResponse.language_name || jsonResponse.language,
+            word_count: jsonResponse.word_count
+          });
+        } else {
+          throw new Error("Invalid response from Gradio");
+        }
+      } else {
+        // Standard Python backend proxy
+        proxyFile(req, res, "/api/process-audio");
+      }
     } catch (error: any) {
-      console.error("Debug proxy error:", error);
+      console.error(`[Process Audio] Error:`, error);
+      res.status(500).json({
+        error: "Audio processing failed",
+        details: error.message,
+        hint: isHuggingFace ? "Check if HF Spaces is running" : "Check if Python backend is running"
+      });
+    }
+  });
+
+  /**
+   * Transcribe Audio Only
+   * HF Spaces Gradio function index: 0 (transcribe_audio - first tab)
+   */
+  app.post("/api/python/transcribe", upload.single('audio'), async (req, res) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: "No audio file provided" });
+        return;
+      }
+
+      if (isHuggingFace) {
+        console.log(`[HF Spaces] Transcribing: ${req.file.originalname}`);
+
+        const filePath = await uploadToGradio(req.file.buffer, req.file.originalname, req.file.mimetype);
+
+        // Call transcribe_audio function (fn_index 0)
+        const result = await callGradioApi(0, [filePath]);
+
+        if (result && Array.isArray(result) && result.length > 0) {
+          const jsonResponse = JSON.parse(result[0]);
+
+          if (jsonResponse.error) {
+            res.status(500).json({ error: jsonResponse.error });
+            return;
+          }
+
+          res.json({
+            success: true,
+            transcript: jsonResponse.transcript,
+            language: jsonResponse.language,
+            word_count: jsonResponse.word_count
+          });
+        } else {
+          throw new Error("Invalid response from Gradio");
+        }
+      } else {
+        proxyFile(req, res, "/api/transcribe");
+      }
+    } catch (error: any) {
+      console.error(`[Transcribe] Error:`, error);
+      res.status(500).json({ error: "Transcription failed", details: error.message });
+    }
+  });
+
+  /**
+   * Summarize/Refine Text
+   * HF Spaces Gradio function index: 1 (summarize_text - second tab)
+   */
+  app.post("/api/python/summarize", async (req, res) => {
+    try {
+      const { text, strategy = "balanced", quality = "medium" } = req.body;
+
+      if (!text || text.trim().length < 10) {
+        res.status(400).json({ error: "Text too short to summarize" });
+        return;
+      }
+
+      if (isHuggingFace) {
+        console.log(`[HF Spaces] Summarizing text (${text.length} chars)`);
+
+        // Call summarize_text function (fn_index 1)
+        const result = await callGradioApi(1, [text, strategy, quality]);
+
+        if (result && Array.isArray(result) && result.length > 0) {
+          const jsonResponse = JSON.parse(result[0]);
+
+          if (jsonResponse.error) {
+            res.status(500).json({ error: jsonResponse.error });
+            return;
+          }
+
+          res.json({
+            success: true,
+            summary: jsonResponse.summary,
+            word_count: jsonResponse.word_count,
+            summary_word_count: jsonResponse.summary_word_count
+          });
+        } else {
+          throw new Error("Invalid response from Gradio");
+        }
+      } else {
+        proxyJson(req, res, "/api/summarize");
+      }
+    } catch (error: any) {
+      console.error(`[Summarize] Error:`, error);
+      res.status(500).json({ error: "Summarization failed", details: error.message });
+    }
+  });
+
+  /**
+   * Generate Document (BRD/PO)
+   * HF Spaces Gradio function index: 3 (fourth tab in Gradio interface)
+   */
+  app.post("/api/python/generate-document", async (req, res) => {
+    try {
+      const { text, document_type = "brd", metadata = {} } = req.body;
+
+      if (!text) {
+        res.status(400).json({ error: "No text provided" });
+        return;
+      }
+
+      if (isHuggingFace) {
+        console.log(`[HF Spaces] Generating ${document_type} document`);
+
+        // Call generate_document function (fn_index 3)
+        // Inputs: text, document_type, metadata_json
+        const metadataJson = JSON.stringify(metadata);
+        const result = await callGradioApi(3, [text, document_type, metadataJson]);
+
+        if (result && Array.isArray(result) && result.length > 0) {
+          const jsonResponse = JSON.parse(result[0]);
+
+          if (jsonResponse.error) {
+            res.status(500).json({ error: jsonResponse.error });
+            return;
+          }
+
+          res.json({
+            success: true,
+            document: jsonResponse.document,
+            document_type: jsonResponse.document_type,
+            filename: jsonResponse.filename,
+            word_count: jsonResponse.word_count
+          });
+        } else {
+          throw new Error("Invalid response from Gradio");
+        }
+      } else {
+        proxyJson(req, res, "/api/generate-document");
+      }
+    } catch (error: any) {
+      console.error(`[Generate Document] Error:`, error);
+      res.status(500).json({ error: "Document generation failed", details: error.message });
+    }
+  });
+
+  /**
+   * Test endpoint for file upload
+   */
+  app.post("/api/python/test-upload", upload.single('audio'), (req, res) => {
+    if (isHuggingFace) {
+      res.json({
+        success: true,
+        message: "Using HF Spaces - use /api/python/transcribe or /api/python/process-audio"
+      });
+    } else {
+      proxyFile(req, res, "/api/test-upload");
+    }
+  });
+
+  /**
+   * Debug/Health check endpoint
+   */
+  app.get("/api/debug-proxy", async (req, res) => {
+    try {
+      console.log("[Debug] Checking backend connection...");
+
+      if (isHuggingFace) {
+        // For HF Spaces, try to fetch the main page
+        const response = await fetch(`${pythonUrl}/`);
+        res.json({
+          configuredUrl: pythonUrl,
+          rawEnvVar: process.env.PYTHON_BACKEND_URL,
+          isHuggingFace: true,
+          status: response.status,
+          statusText: response.statusText,
+          message: response.ok ? "HF Spaces is accessible" : "HF Spaces may be starting up"
+        });
+      } else {
+        // Standard backend health check
+        const healthUrl = `${pythonUrl}/api/health`;
+        const response = await fetch(healthUrl);
+        const bodyText = await response.text();
+        let bodyJson = { error: "Invalid JSON response" };
+        try {
+          bodyJson = JSON.parse(bodyText);
+        } catch (e) {
+          // Ignore
+        }
+
+        res.json({
+          configuredUrl: pythonUrl,
+          rawEnvVar: process.env.PYTHON_BACKEND_URL,
+          isHuggingFace: false,
+          targetEndpoint: healthUrl,
+          status: response.status,
+          statusText: response.statusText,
+          backendResponse: bodyJson
+        });
+      }
+    } catch (error: any) {
+      console.error("[Debug] Error:", error);
       res.status(500).json({
         configuredUrl: pythonUrl,
         rawEnvVar: process.env.PYTHON_BACKEND_URL,
+        isHuggingFace,
         error: error.message,
-        details: "Failed to connect to Python backend"
+        details: "Failed to connect to backend"
       });
     }
   });
