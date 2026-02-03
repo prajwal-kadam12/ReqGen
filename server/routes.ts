@@ -628,8 +628,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Attempting to fetch: ${healthUrl}`);
 
       const response = await fetch(healthUrl);
-      const data = await response.json().catch(() => ({ error: "Invalid JSON response" }));
-      const text = await response.text().catch(() => "No text");
+      const bodyText = await response.text();
+      let bodyJson = { error: "Invalid JSON response" };
+      try {
+        bodyJson = JSON.parse(bodyText);
+      } catch (e) {
+        // Ignore JSON parse error, we have text
+      }
 
       res.json({
         configuredUrl: pythonUrl,
@@ -637,8 +642,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetEndpoint: healthUrl,
         status: response.status,
         statusText: response.statusText,
-        backendResponse: data,
-        backendResponseText: text
+        backendResponse: bodyJson,
+        backendResponseText: bodyText
       });
     } catch (error: any) {
       console.error("Debug proxy error:", error);
